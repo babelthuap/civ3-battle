@@ -237,7 +237,8 @@ MONTE_CARLO.addEventListener('click', () => {
       const {att, def} = calculateStr();
       const odds = monteCarlo(
           att, parseInt(ATT_HP.value), def, parseInt(DEF_HP.value), 1e6);
-      ODDS.innerText = (odds * 100).toFixed(1) + '%';
+      ODDS.innerText =
+          (odds * 100).toFixed(odds >= 0.1 ? 1 : (odds >= 0.01 ? 2 : 3)) + '%';
       inputs.forEach(el => el.disabled = false);
     });
   });
