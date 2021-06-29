@@ -1,0 +1,243 @@
+<title>Civ3 Battle</title>
+<style>
+  body {
+    background-color: tan;
+  }
+  .container {
+    display: flex;
+    justify-content: center;
+  }
+  .unit {
+    margin: 0px 16px;
+    position: relative;
+    padding-bottom: 36px;
+  }
+  .unit img {
+    display: block;
+  }
+  .unit > * {
+    margin-bottom: 8px;
+  }
+  .unit .str {
+    position: absolute;
+    bottom: 0;
+    font-weight: bold;
+  }
+  #att-hp, #def-hp {
+    font-size: 18px;
+    width: 64px;
+  }
+  center > * {
+    margin: 12px;
+  }
+  center button {
+    font-family: monospace;
+  }
+</style>
+<div class="container">
+  <div class="unit">
+    <h1>Attacker</h1>
+    <img id="att-img">
+    <select id="att-select"></select>
+    <div>HP: <input id="att-hp" type="number"></div>
+    <div>Crossing river? <input type="checkbox" id="river"></div>
+    <div class="str">Strength: <span id="att-str"></span></div>
+  </div>
+  <div class="unit">
+    <h1>Defender</h1>
+    <img id="def-img">
+    <select id="def-select"></select>
+    <div>HP: <input id="def-hp" type="number"></div>
+    <div>Terrain: 
+      <select id="terrain">
+        <option value="100">Mountains (+100%)</option>
+        <option value="50">Hills (+50%)</option>
+        <option value="25">Forest/Jungle (+25%)</option>
+        <option value="10" selected>Other (+10%)</option>
+        <option value="0">Air (+0%)</option>
+      </select>
+    </div>
+    <div>Improvements: 
+      <select id="improvements">
+        <option value="0" selected>None (+0%)</option>
+        <option value="50">Fortress (+50%)</option>
+        <option value="0">Town (+0%)</option>
+        <option value="50">Walled Town (+50%)</option>
+        <option value="50">City (+50%)</option>
+        <option value="100">Metropolis (+100%)</option>
+      </select>
+    </div>
+    <div>Fortified? (+25%) <input type="checkbox" id="fortified"></div>
+    <div class="str">Strength: <span id="def-str"></span></div>
+  </div>
+</div>
+<center>
+  <button id="fight">Fight!</button>
+  <button id="reset">Reset</button>
+  <div>
+    <button id="monte-carlo">Calculate Odds</button>
+    <div id="odds"></div>
+  </div>
+</center>
+<script>
+// data from https://civilization.fandom.com/wiki/List_of_units_in_Civ3
+// key: [url, cost, attack, defense, moves, bombard, range, rate of fire]
+const BASE = 'https://static.wikia.nocookie.net/civilization/images/';
+const UNITS = {'AEGIS Cruiser':['4/4d/AEGIS_Cruiser_%28Civ3%29.png',160,15,10,7,6,2,2],'Ancient Cavalry':['e/eb/Ancient_Cavalry_%28Civ3%29.png',40,3,2,2,0,0,0],'Ansar Warrior':['7/78/Ansar_Warrior_%28Civ3%29.png',60,4,2,3,0,0,0],'Archer':['7/7c/Archer_%28Civ3%29.png',20,2,1,1,1,0,1],'Artillery':['d/d8/Artillery_%28Civ3%29.png',80,0,0,1,12,2,2],'Battleship':['8/89/Battleship_%28Civ3%29.png',200,18,12,5,8,2,2],'Berserk':['b/bb/Berserk_%28Civ3%29.png',70,6,2,1,0,0,0],'Bomber':['3/3a/Bomber_%28Civ3%29.png',100,0,2,1,12,10,3],'Bowman':['2/28/Bowman_%28Civ3%29.png',20,2,2,1,1,0,1],'Cannon':['b/bc/Cannon_%28Civ3%29.png',40,0,0,1,8,1,1],'Caravel':['3/3f/Caravel_%28Civ3%29.png',40,1,2,4,0,0,0],'Carrack':['7/75/Carrack_%28Civ3%29.png',40,2,2,4,0,0,0],'Carrier':['c/cd/Carrier_%28Civ3%29.png',180,1,8,7,0,0,0],'Catapult':['6/62/Catapult_%28Civ3%29.png',20,0,0,1,4,1,1],'Cavalry':['3/3c/Cavalry_%28Civ3%29.png',80,6,3,3,0,0,0],'Chariot':['0/06/Chariot_%28Civ3%29.png',20,1,1,2,0,0,0],'Chasqui Scout':['a/af/Chasqui_Scout_%28Civ3%29.png',20,1,1,2,0,0,0],'Conquistador':['2/2e/Conquistador_%28Civ3%29.png',70,3,2,2,0,0,0],'Cossack':['9/98/Cossack_%28Civ3%29.png',90,6,3,3,0,0,0],'Cruise Missile':['9/91/Cruise_Missile_%28Civ3%29.png',60,0,0,1,16,4,3],'Cruiser':['f/fd/Cruiser_%28Civ3%29.png',160,15,10,6,7,1,2],'Crusader':['c/c0/Crusader_%28Civ3%29.png',70,5,3,1,0,0,0],'Curragh':['1/11/Curragh_%28Civ3%29.png',15,1,1,2,0,0,0],'Destroyer':['7/75/Destroyer_%28Civ3%29.png',120,12,8,8,6,1,2],'Dromon':['d/db/Dromon_%28Civ3%29.png',30,2,1,3,2,1,2],'Enkidu Warrior':['e/e7/Enkidu_Warrior_%28Civ3%29.png',10,1,2,1,0,0,0],'Explorer':['0/0e/Explorer_%28Civ3%29.png',20,0,0,2,0,0,0],'F-15':['8/86/F-15_%28Civ3%29.png',100,8,4,1,6,9,2],'Fighter':['3/32/Fighter_%28Civ3%29.png',80,4,2,1,3,6,1],'Flak':['e/ea/Flak_%28Civ3%29.png',70,1,6,1,0,0,0],'Frigate':['d/df/Frigate_%28Civ3%29.png',60,2,2,5,3,1,2],'Galleon':['7/79/Galleon_%28Civ3%29.png',50,1,2,4,0,0,0],'Galley':['e/e1/Galley_%28Civ3%29.png',30,1,1,3,0,0,0],'Gallic Swordsman':['2/26/Gallic_Swordsman_%28Civ3%29.png',50,3,2,2,0,0,0],'Guerilla':['6/66/Guerilla_%28Civ3%29.png',90,6,6,1,3,0,1],'Helicopter':['8/81/Helicopter_%28Civ3%29.png',100,0,2,1,0,6,0],'Hoplite':['1/1d/Hoplite_%28Civ3%29.png',20,1,3,1,0,0,0],'Horseman':['d/d6/Horseman_%28Civ3%29.png',30,2,1,2,0,0,0],'Hussar':['8/89/Hussar_%28Civ3%29.png',80,6,3,3,0,0,0],'Hwacha':['c/cb/Hwacha_%28Civ3%29.png',40,0,0,1,8,1,1],'ICBM':['3/39/ICBM_%28Civ3%29.png',500,0,0,1,0,0,0],'Immortals':['3/38/Immortals_%28Civ3%29.png',30,4,2,1,0,0,0],'Impi':['1/1a/Impi_%28Civ3%29.png',20,1,2,2,0,0,0],'Infantry':['a/af/Infantry_%28Civ3%29.png',90,6,10,1,0,0,0],'Ironclad':['a/a5/Ironclad_%28Civ3%29.png',90,5,6,3,6,1,2],'Jaguar Warrior':['5/52/Jaguar_Warrior_%28Civ3%29.png',15,1,1,2,0,0,0],'Javelin Thrower':['c/c9/Javelin_Thrower_%28Civ3%29.png',30,2,2,1,0,0,0],'Jet Fighter':['9/91/Jet_Fighter_%28Civ3%29.png',100,8,4,1,3,9,1],'Keshik':['1/14/Keshik_%28Civ3%29.png',60,4,2,2,0,0,0],'Knight':['7/7d/Knight_%28Civ3%29.png',70,4,3,2,0,0,0],'Leader':['e/eb/Leader_%28Civ3%29.png',0,0,0,3,0,0,0],'Legionary':['9/9e/Legionary_%28Civ3%29.png',30,3,3,1,0,0,0],'Longbowman':['6/65/Longbowman_%28Civ3%29.png',40,4,1,1,2,0,1],'Man-O-War':['9/9c/Man-O-War_%28Civ3%29.png',65,4,2,5,4,1,2],'Marine':['9/9c/Marine_%28Civ3%29.png',120,12,6,1,0,0,0],'Mech Infantry':['5/54/Mech_Infantry_%28Civ3%29.png',110,12,18,2,0,0,0],'Medieval Infantry':['5/59/Medieval_Infantry_%28Civ3%29.png',40,4,2,1,0,0,0],'Mobile SAM':['f/f0/Mobile_SAM_%28Civ3%29.png',100,1,6,2,0,0,0],'Modern Armor':['2/21/Modern_Armor_%28Civ3%29.png',120,24,16,3,0,0,0],'Modern Paratrooper':['4/41/Modern_Paratrooper_%28Civ3%29.png',110,6,11,1,0,0,0],'Mounted Warrior':['c/c3/Mounted_Warrior_%28Civ3%29.png',30,3,1,2,0,0,0],'Musketeer':['5/5c/Musketeer_%28Civ3%29.png',60,2,5,1,2,0,1],'Musketman':['1/1c/Musketman_%28Civ3%29.png',60,2,4,1,0,0,0],'Nuclear Submarine':['a/a1/Nuclear_Submarine_%28Civ3%29.png',140,8,4,5,0,0,0],'Numidian Mercenary':['0/0f/Numidian_Mercenary_%28Civ3%29.png',30,2,3,1,0,0,0],'Panzer':['7/7a/Panzer_%28Civ3%29.png',100,16,8,3,0,0,0],'Paratrooper':['c/ca/Paratrooper_%28Civ3%29.png',90,4,9,1,0,0,0],'Pikeman':['c/cd/Pikeman_%28Civ3%29.png',30,1,3,1,0,0,0],'Privateer':['7/74/Privateer_%28Civ3%29.png',50,2,1,5,0,0,0],'Radar Artillery':['a/a3/Radar_Artillery_%28Civ3%29.png',120,0,0,2,16,2,2],'Rider':['c/ca/Rider_%28Civ3%29.png',70,4,3,3,0,0,0],'Rifleman':['1/19/Rifleman_%28Civ3%29.png',80,4,6,1,0,0,0],'Samurai':['0/04/Samurai_%28Civ3%29.png',70,4,4,2,0,0,0],'Scout':['6/61/Scout_%28Civ3%29.png',10,0,0,2,0,0,0],'Settler':['8/89/Settler_%28Civ3%29.png',30,0,0,1,0,0,0],'Sipahi':['c/cb/Sipahi_%28Civ3%29.png',100,8,3,3,0,0,0],'Spearman':['1/11/Spearman_%28Civ3%29.png',20,1,2,1,0,0,0],'Stealth Bomber':['1/1a/Stealth_Bomber_%28Civ3%29.png',240,0,5,1,18,16,3],'Stealth Fighter':['6/65/Stealth_Fighter_%28Civ3%29.png',120,8,6,1,6,12,2],'Submarine':['5/56/Submarine_%28Civ3%29.png',100,8,4,4,0,0,0],'Swiss Mercenary':['a/a5/Swiss_Mercenary_%28Civ3%29.png',30,1,4,1,0,0,0],'Swordsman':['0/05/Swordsman_%28Civ3%29.png',30,3,2,1,0,0,0],'Tactical Nuke':['3/36/Tactical_Nuke_%28Civ3%29.png',300,0,0,1,0,0,0],'Tank':['c/c8/Tank_%28Civ3%29.png',100,16,8,2,0,0,0],'Three-Man Chariot':['a/af/Three-Man_Chariot_%28Civ3%29.png',30,2,2,2,0,0,0],'TOW Infantry':['e/e1/TOW_Infantry_%28Civ3%29.png',120,12,14,1,6,0,1],'Transport':['4/44/Transport_%28Civ3%29.png',100,1,2,6,0,0,0],'Trebuchet':['1/1a/Trebuchet_%28Civ3%29.png',30,0,0,1,6,1,1],'War Chariot':['8/8b/War_Chariot_%28Civ3%29.png',20,2,1,2,0,0,0],'War Elephant':['6/64/War_Elephant_%28Civ3%29.png',70,4,3,2,0,0,0],'Warrior':['5/5c/Warrior_%28Civ3%29.png',10,1,1,1,0,0,0],'Worker':['f/f2/Worker_%28Civ3%29.png',10,0,0,1,0,0,0]};
+const Stat = {
+  URL: 0,
+  COST: 1,
+  ATT: 2,
+  DEF: 3,
+  MVS: 4,
+  BOM: 5,
+  RAN: 6,
+  ROF: 7,
+};
+const DELAY = 500;  // ms
+
+const ATT_HP = document.getElementById('att-hp');
+const ATT_IMG = document.getElementById('att-img');
+const ATT_SELECT = document.getElementById('att-select');
+const ATT_STR = document.getElementById('att-str');
+const DEF_HP = document.getElementById('def-hp');
+const DEF_IMG = document.getElementById('def-img');
+const DEF_SELECT = document.getElementById('def-select');
+const DEF_STR = document.getElementById('def-str');
+const FIGHT = document.getElementById('fight');
+const FORTIFIED = document.getElementById('fortified');
+const IMPROVEMENTS = document.getElementById('improvements');
+const MONTE_CARLO = document.getElementById('monte-carlo');
+const ODDS = document.getElementById('odds');
+const RESET = document.getElementById('reset');
+const RIVER = document.getElementById('river');
+const TERRAIN = document.getElementById('terrain');
+
+function calculateStr() {
+  const att = UNITS[ATT_SELECT.value][Stat.ATT];
+  const defBonus = parseInt(TERRAIN.value) + parseInt(IMPROVEMENTS.value) +
+      (FORTIFIED.checked ? 25 : 0) + (RIVER.checked ? 25 : 0);
+  const def = UNITS[DEF_SELECT.value][Stat.DEF] * (1 + defBonus / 100);
+  ATT_STR.innerText = Number.isInteger(att) ? att : att.toFixed(1);
+  DEF_STR.innerText = Number.isInteger(def) ? def : def.toFixed(1);
+  return {att, def};
+}
+IMPROVEMENTS.addEventListener('change', calculateStr);
+FORTIFIED.addEventListener('change', calculateStr);
+RIVER.addEventListener('change', calculateStr);
+TERRAIN.addEventListener('change', calculateStr);
+
+let attFullHp = 3;
+let defFullHp = 3;
+function reset() {
+  ATT_HP.value = attFullHp;
+  ATT_HP.style.backgroundColor = '';
+  ATT_IMG.src = BASE + UNITS[ATT_SELECT.value][Stat.URL];
+  DEF_HP.value = defFullHp;
+  DEF_HP.style.backgroundColor = '';
+  DEF_IMG.src = BASE + UNITS[DEF_SELECT.value][Stat.URL];
+}
+
+for (let [name, stats] of Object.entries(UNITS)) {
+  if (stats[Stat.ATT] > 0) {
+    const el = document.createElement('option');
+    el.innerText =
+        `${name} (${stats[Stat.ATT]}/${stats[Stat.DEF]}/${stats[Stat.MVS]})`;
+    el.value = name;
+    ATT_SELECT.append(el);
+  }
+  if (stats[Stat.DEF] > 0) {
+    const el = document.createElement('option');
+    el.innerText =
+        `${name} (${stats[Stat.ATT]}/${stats[Stat.DEF]}/${stats[Stat.MVS]})`;
+    el.value = name;
+    DEF_SELECT.append(el);
+  }
+}
+ATT_SELECT.addEventListener('change', () => {
+  calculateStr();
+  reset();
+});
+DEF_SELECT.addEventListener('change', () => {
+  calculateStr();
+  reset();
+});
+ATT_SELECT.value = 'Knight';
+DEF_SELECT.value = 'Tank';
+calculateStr();
+reset();
+
+let fighting = false;
+FIGHT.addEventListener('click', () => {
+  if (fighting) {
+    return;
+  }
+  fighting = true;
+  const {att, def} = calculateStr();
+  if (parseInt(ATT_HP.value) <= 0 || parseInt(DEF_HP.value) <= 0) {
+    reset();
+    setTimeout(() => fight(att, def), DELAY / 2);
+  } else {
+    attFullHp = parseInt(ATT_HP.value);
+    defFullHp = parseInt(DEF_HP.value);
+    fight(att, def);
+  }
+});
+RESET.addEventListener('click', () => {
+  fighting = false;
+  reset();
+});
+
+function fight(att, def) {
+  if (!fighting) {
+    return;
+  }
+  const attWins = Math.random() < att / (att + def);
+  const hpInput = attWins ? DEF_HP : ATT_HP;
+  hpInput.value -= 1;
+  hpInput.style.backgroundColor = 'orangered';
+  if (parseInt(hpInput.value) <= 0) {
+    fighting = false;
+  } else {
+    setTimeout(() => hpInput.style.backgroundColor = '', DELAY / 2);
+    setTimeout(() => fight(att, def), DELAY);
+  }
+}
+
+function monteCarlo(att, ahp, def, dhp, matches) {
+  const start = performance.now();
+  const attProb = att / (att + def);
+  let wins = 0;
+  for (let i = 0; i < matches; i++) {
+    let _ahp = ahp;
+    let _dhp = dhp;
+    while (_ahp > 0 && _dhp > 0) {
+      if (Math.random() < attProb) {
+        _dhp--;  // attacker wins round
+      } else {
+        _ahp--;  // defender wins round
+      }
+    }
+    if (_dhp === 0) {
+      wins++;
+    }
+  }
+  const duration = performance.now() - start;
+  console.log(`monteCarlo ${duration.toFixed(1)} ms`);
+  return wins / matches;
+}
+
+MONTE_CARLO.addEventListener('click', () => {
+  const inputs = document.querySelectorAll('button, select, input');
+  requestAnimationFrame(() => {
+    inputs.forEach(el => el.disabled = true);
+    requestAnimationFrame(() => {
+      const {att, def} = calculateStr();
+      const odds = monteCarlo(
+          att, parseInt(ATT_HP.value), def, parseInt(DEF_HP.value), 1e6);
+      ODDS.innerText = (odds * 100).toFixed(1) + '%';
+      inputs.forEach(el => el.disabled = false);
+    });
+  });
+});
+</script>
