@@ -162,17 +162,18 @@ function reset() {
 }
 
 for (let [name, stats] of Object.entries(UNITS)) {
+  const bom = stats[Stat.BOM] > 0 ? `(${stats[Stat.BOM]})` : '';
+  const text = `${name} ${stats[Stat.ATT]}${bom}/${stats[Stat.DEF]}/${
+      stats[Stat.MVS]}`;
   if (stats[Stat.ATT] > 0) {
     const el = document.createElement('option');
-    el.innerText =
-        `${name} (${stats[Stat.ATT]}/${stats[Stat.DEF]}/${stats[Stat.MVS]})`;
+    el.innerText = text;
     el.value = name;
     ATT_SELECT.append(el);
   }
   if (stats[Stat.DEF] > 0) {
     const el = document.createElement('option');
-    el.innerText =
-        `${name} (${stats[Stat.ATT]}/${stats[Stat.DEF]}/${stats[Stat.MVS]})`;
+    el.innerText = text;
     el.value = name;
     DEF_SELECT.append(el);
   }
