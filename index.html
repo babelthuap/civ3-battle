@@ -46,6 +46,9 @@
     padding: 2px 6px;
     text-align: center;
   }
+  #odds td.empty {
+    border: none;
+  }
   #odds th:nth-of-type(2),
   #odds th:nth-of-type(4),
   #odds td:nth-of-type(2),
@@ -279,6 +282,9 @@ function getOdds(attStr, attHp, defStr, defHp) {
 
 function createEl(tag, value = undefined) {
   const el = document.createElement(tag);
+  if (tag === 'td' && value === undefined) {
+    el.classList.add('empty');
+  }
   if (value !== undefined) {
     el.innerText = value;
   }
@@ -300,6 +306,9 @@ function renderOdds(att, def) {
     if (odds[i][0] !== undefined) {
       tr.append(createEl('td', `${i}-0`));
       tr.append(createEl('td', odds[i][0].toFixed(1) + '%'));
+    } else {
+      tr.append(createEl('td'));
+      tr.append(createEl('td'));
     }
     if (odds[i][1] !== undefined) {
       tr.append(createEl('td', `0-${i}`));
