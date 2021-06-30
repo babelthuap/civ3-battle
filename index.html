@@ -20,6 +20,9 @@
   .unit > * {
     margin-bottom: 8px;
   }
+  .unit label {
+    display: block;
+  }
   .unit .str {
     position: absolute;
     bottom: 0;
@@ -34,6 +37,14 @@
   }
   center button {
     font-family: monospace;
+  }
+  #odds {
+    border-collapse: collapse;
+  }
+  #odds th, #odds td {
+    border: 1px solid black;
+    padding: 2px 6px;
+    text-align: center;
   }
 </style>
 <div class="container">
@@ -50,7 +61,8 @@
     <img id="def-img">
     <select id="def-select"></select>
     <div>HP: <input id="def-hp" type="number"></div>
-    <div>Terrain: 
+    <div>
+      <label for="terrain">Terrain:</label>
       <select id="terrain">
         <option value="100">Mountains (+100%)</option>
         <option value="50">Hills (+50%)</option>
@@ -59,7 +71,8 @@
         <option value="0">Air (+0%)</option>
       </select>
     </div>
-    <div>Improvements: 
+    <div>
+      <label for="improvements">Improvements:</label>
       <select id="improvements">
         <option value="0" selected>None (+0%)</option>
         <option value="50">Fortress (+50%)</option>
@@ -76,9 +89,10 @@
 <center>
   <button id="fight">Fight!</button>
   <button id="reset">Reset</button>
+  <hr>
   <div>
-    <button id="monte-carlo">Calculate Odds</button>
-    <div id="odds"></div>
+    <h4>Combat odds</h4>
+    <table id="odds"></table>
   </div>
 </center>
 <script>
@@ -109,7 +123,6 @@ const DEF_STR = document.getElementById('def-str');
 const FIGHT = document.getElementById('fight');
 const FORTIFIED = document.getElementById('fortified');
 const IMPROVEMENTS = document.getElementById('improvements');
-const MONTE_CARLO = document.getElementById('monte-carlo');
 const ODDS = document.getElementById('odds');
 const RESET = document.getElementById('reset');
 const RIVER = document.getElementById('river');
@@ -122,6 +135,7 @@ function calculateStr() {
   const def = UNITS[DEF_SELECT.value][Stat.DEF] * (1 + defBonus / 100);
   ATT_STR.innerText = Number.isInteger(att) ? att : att.toFixed(1);
   DEF_STR.innerText = Number.isInteger(def) ? def : def.toFixed(1);
+  renderOdds(att, def);
   return {att, def};
 }
 IMPROVEMENTS.addEventListener('change', calculateStr);
@@ -157,17 +171,17 @@ for (let [name, stats] of Object.entries(UNITS)) {
   }
 }
 ATT_SELECT.addEventListener('change', () => {
-  calculateStr();
   reset();
+  calculateStr();
 });
 DEF_SELECT.addEventListener('change', () => {
-  calculateStr();
   reset();
+  calculateStr();
 });
 ATT_SELECT.value = 'Knight';
 DEF_SELECT.value = 'Tank';
-calculateStr();
 reset();
+calculateStr();
 
 let fighting = false;
 FIGHT.addEventListener('click', () => {
@@ -206,41 +220,85 @@ function fight(att, def) {
   }
 }
 
-function monteCarlo(att, ahp, def, dhp, matches) {
-  const start = performance.now();
-  const attProb = att / (att + def);
-  let wins = 0;
-  for (let i = 0; i < matches; i++) {
-    let _ahp = ahp;
-    let _dhp = dhp;
-    while (_ahp > 0 && _dhp > 0) {
-      if (Math.random() < attProb) {
-        _dhp--;  // attacker wins round
-      } else {
-        _ahp--;  // defender wins round
-      }
-    }
-    if (_dhp === 0) {
-      wins++;
-    }
+function choose(n, r) {
+  let combinations = 1;
+  for (let i = n; i > n - r; i--) {
+    combinations *= i;
   }
-  const duration = performance.now() - start;
-  console.log(`monteCarlo ${duration.toFixed(1)} ms`);
-  return wins / matches;
+  for (let i = r; i > 1; i--) {
+    combinations /= i;
+  }
+  return combinations;
 }
 
-MONTE_CARLO.addEventListener('click', () => {
-  const inputs = document.querySelectorAll('button, select, input');
-  requestAnimationFrame(() => {
-    inputs.forEach(el => el.disabled = true);
-    requestAnimationFrame(() => {
-      const {att, def} = calculateStr();
-      const odds = monteCarlo(
-          att, parseInt(ATT_HP.value), def, parseInt(DEF_HP.value), 1e6);
-      ODDS.innerText =
-          (odds * 100).toFixed(odds >= 0.1 ? 1 : (odds >= 0.01 ? 2 : 3)) + '%';
-      inputs.forEach(el => el.disabled = false);
-    });
-  });
-});
+// adapted from http://andjo.free.fr/civ/CombatCalc2.htm
+function getOdds(attStr, attHp, defStr, defHp) {
+  const attOdds = attStr / (attStr + defStr);
+  const defOdds = defStr / (attStr + defStr);
+  const odds = [];
+  let attWin = 0;
+  let defWin = 0;
+  for (let i = Math.max(attHp, defHp); i >= 1; i--) {
+    const row = [];
+    odds.push(row);
+    if (i > attHp) {
+      row.push(0);
+    } else {
+      const rounds = (attHp - i) + defHp;
+      let combinations = choose(rounds, defHp);
+      if (i < attHp) {
+        combinations -= choose(rounds - 1, defHp);
+      }
+      const percent = combinations * Math.pow(attOdds, defHp) *
+          Math.pow(defOdds, attHp - i) * 100;
+      row.push(percent);
+      attWin += percent;
+    }
+    if (i > defHp) {
+      row.push(0);
+    } else {
+      const rounds = (defHp - i) + attHp;
+      let combinations = choose(rounds, attHp);
+      if (i < defHp) {
+        combinations -= choose(rounds - 1, attHp);
+      }
+      const percent = combinations * Math.pow(attOdds, defHp - i) *
+          Math.pow(defOdds, attHp) * 100;
+      row.push(percent);
+      defWin += percent;
+    }
+  }
+  odds.push([attWin, defWin]);
+  return odds.reverse();
+}
+
+function createEl(tag, value = undefined) {
+  const el = document.createElement(tag);
+  if (value !== undefined) {
+    el.innerText = value;
+  }
+  return el;
+}
+
+function renderOdds(att, def) {
+  const odds =
+      getOdds(att, parseInt(ATT_HP.value), def, parseInt(DEF_HP.value));
+  console.log(odds);
+
+  ODDS.innerHTML = '';
+  const header = createEl('tr');
+  header.append(createEl('th', 'Attacker wins'));
+  header.append(createEl('th', odds[0][0].toFixed(1) + '%'));
+  header.append(createEl('th', 'Defender wins'));
+  header.append(createEl('th', odds[0][1].toFixed(1) + '%'));
+  ODDS.append(header);
+  for (let i = 1; i < odds.length; i++) {
+    const tr = createEl('tr');
+    tr.append(createEl('td', `${i}-0`));
+    tr.append(createEl('td', odds[i][0].toFixed(1) + '%'));
+    tr.append(createEl('td', `0-${i}`));
+    tr.append(createEl('td', odds[i][1].toFixed(1) + '%'));
+    ODDS.append(tr);
+  }
+}
 </script>
